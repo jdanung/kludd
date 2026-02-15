@@ -25,9 +25,11 @@ export default function HostGamePage() {
 
   const fetchGameData = useCallback(async () => {
     try {
+      console.log('Fetching game data for code:', code)
       const res = await fetch(`/api/game/${code}`)
       if (!res.ok) throw new Error('Spelet hittades inte')
       const data = await res.json()
+      console.log('Fetched data:', data)
       setPlayers(data.players || [])
       setPhase(data.game.status)
       
