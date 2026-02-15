@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import { pusherServer } from '@/lib/pusher-server'
+import { getPusherServer } from '@/lib/pusher-server'
 
 export async function GET(
   req: NextRequest,

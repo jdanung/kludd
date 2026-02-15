@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import { pusherServer } from '@/lib/pusher-server'
+import { getPusherServer } from '@/lib/pusher-server'
 
 export async function POST(req: NextRequest) {
   try {
@@ -24,6 +24,7 @@ export async function POST(req: NextRequest) {
     if (error) throw error
 
     // Notify host that a guess was submitted
+    const pusherServer = getPusherServer()
     await pusherServer.trigger(`game-${code}`, 'guess-submitted', {
       playerId,
     })

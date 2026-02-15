@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import { pusherServer } from '@/lib/pusher-server'
+import { getPusherServer } from '@/lib/pusher-server'
 
 export async function POST(req: NextRequest) {
   try {
@@ -38,8 +38,7 @@ export async function POST(req: NextRequest) {
 
     const shuffledPrompts = [...prompts].sort(() => 0.5 - Math.random())
     
-    // Uppdatera spelare med deras tilldelade prompts (vi sparar detta i en temporär tabell eller skickar via Pusher)
-    // För enkelhetens skull skickar vi dem via Pusher till varje spelare i nästa steg
+    // Uppdatera spelare med deras tilldelade prompts
     const playerPrompts = players.map((p, i) => ({
       playerId: p.id,
       prompt: shuffledPrompts[i % shuffledPrompts.length].text
@@ -56,6 +55,7 @@ export async function POST(req: NextRequest) {
 
     if (updateError) throw updateError
 
+    const pusherServer = getPusherServer()
     await pusherServer.trigger(`game-${code}`, 'phase-changed', {
       phase: 'drawing',
       prompts: playerPrompts

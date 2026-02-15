@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import { pusherServer } from '@/lib/pusher-server'
+import { getPusherServer } from '@/lib/pusher-server'
 
 export async function POST(req: NextRequest) {
   try {
@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
     if (!players) throw new Error('Inga spelare hittades')
 
     const nextPlayerIndex = game.current_player_index + 1
+    const pusherServer = getPusherServer()
 
     if (nextPlayerIndex < players.length) {
       // Det finns fler teckningar i denna runda
