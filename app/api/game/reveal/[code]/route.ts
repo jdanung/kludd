@@ -45,10 +45,7 @@ export async function GET(
       .select('*, players(name)')
       .in('guess_id', guessIds)
 
-    // 5. Beräkna poäng (enkel version likt Drawful)
-    // - Artist får poäng för varje person som gissar rätt
-    // - Spelare som gissar rätt får poäng
-    // - Spelare som lurar andra med sin "lögn" får poäng per person de lurat
+    // 5. Beräkna och spara poäng (enkel version likt Drawful)
     const results = guesses?.map(guess => {
       const guessVotes = votes?.filter(v => v.guess_id === guess.id) || []
       return {
@@ -56,7 +53,29 @@ export async function GET(
         votes: guessVotes,
         voteCount: guessVotes.length
       }
-    })
+    }) || []
+
+    // Uppdatera poäng i databasen
+    for (const res of results) {
+      if (res.is_original) {
+        // Artist får poäng per person som gissat rätt
+        if (res.voteCount > 0) {
+          const artistPoints = res.voteCount * 1000
+          await supabase.rpc('increment_score', { p_player_id: drawing.player_id, p_amount: artistPoints })
+          
+          // Spelare som gissat rätt får poäng
+          for (const vote of res.votes) {
+            await supabase.rpc('increment_score', { p_player_id: vote.player_id, p_amount: 500 })
+          }
+        }
+      } else {
+        // Spelare som lurat andra får poäng
+        if (res.voteCount > 0) {
+          const liarPoints = res.voteCount * 250
+          await supabase.rpc('increment_score', { p_player_id: res.player_id, p_amount: liarPoints })
+        }
+      }
+    }
 
     return NextResponse.json({
       game,

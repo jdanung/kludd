@@ -34,6 +34,16 @@ export async function POST(req: NextRequest) {
 
     if (error) throw error
 
+    // Lägg till den riktiga titeln som en "original"-gissning så man kan rösta på den
+    await supabase
+      .from('guesses')
+      .insert({
+        drawing_id: drawing.id,
+        player_id: playerId,
+        text: promptText || 'En hemlig ritning',
+        is_original: true
+      })
+
     // Notify host that a drawing was submitted
     await pusherServer.trigger(`game-${code}`, 'drawing-submitted', {
       playerId,

@@ -92,6 +92,18 @@ CREATE POLICY "Allow all for guesses" ON guesses FOR ALL USING (true) WITH CHECK
 CREATE POLICY "Allow all for votes" ON votes FOR ALL USING (true) WITH CHECK (true);
 
 -- ============================================
+-- Functions
+-- ============================================
+CREATE OR REPLACE FUNCTION increment_score(p_player_id UUID, p_amount INT)
+RETURNS void AS $$
+BEGIN
+  UPDATE players
+  SET score = score + p_amount
+  WHERE id = p_player_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================
 -- Seed: Roliga rit-instruktioner
 -- ============================================
 INSERT INTO prompts (text) VALUES
