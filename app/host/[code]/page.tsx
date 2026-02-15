@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { getPusherClient } from '@/lib/pusher-client'
 import { supabase } from '@/lib/supabase'
@@ -15,6 +15,7 @@ import HostScores from '@/components/host/Scores'
 export default function HostGamePage() {
   const params = useParams()
   const code = params.code as string
+  const [gameId, setGameId] = useState<string | null>(null)
   const [players, setPlayers] = useState<Player[]>([])
   const [phase, setPhase] = useState<GamePhase>('lobby')
   const [currentDrawing, setCurrentDrawing] = useState<Drawing | null>(null)
@@ -22,37 +23,65 @@ export default function HostGamePage() {
   const [results, setResults] = useState<any[]>([])
   const [submittedPlayerIds, setSubmittedPlayerIds] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
+  const gameIdRef = useRef<string | null>(null)
+
+  const fetchPlayers = useCallback(async (gId: string) => {
+    const { data: playerData, error: playerError } = await supabase
+      .from('players')
+      .select('*')
+      .eq('game_id', gId)
+      .order('player_order')
+
+    console.log('Direct Supabase players query for game', gId, ':', playerData, playerError)
+    if (playerData) {
+      setPlayers(playerData)
+    }
+  }, [])
 
   const fetchGameData = useCallback(async () => {
     try {
-      console.log('Fetching game data for code:', code)
-      const res = await fetch(`/api/game/${code}`)
-      if (!res.ok) throw new Error('Spelet hittades inte')
-      const data = await res.json()
-      console.log('Fetched data:', data)
-      setPlayers(data.players || [])
-      setPhase(data.game.status)
-      
-      if (['guessing', 'voting', 'reveal'].includes(data.game.status)) {
+      const { data: game, error: gameError } = await supabase
+        .from('games')
+        .select('*')
+        .eq('code', code)
+        .neq('status', 'finished')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single()
+
+      if (gameError || !game) {
+        console.error('Game not found:', gameError)
+        setError('Spelet hittades inte')
+        return
+      }
+
+      console.log('Found game directly from Supabase:', game.id, game.status)
+      setGameId(game.id)
+      gameIdRef.current = game.id
+      setPhase(game.status)
+
+      await fetchPlayers(game.id)
+
+      if (['guessing', 'voting', 'reveal'].includes(game.status)) {
         const { data: drawings } = await supabase
           .from('drawings')
           .select('*')
-          .eq('game_id', data.game.id)
-          .eq('round', data.game.current_round || 1)
+          .eq('game_id', game.id)
+          .eq('round', game.current_round || 1)
           .limit(1)
-        
+
         if (drawings && drawings.length > 0) {
           setCurrentDrawing(drawings[0])
 
-          if (['voting', 'reveal'].includes(data.game.status)) {
+          if (['voting', 'reveal'].includes(game.status)) {
             const { data: guessData } = await supabase
               .from('guesses')
               .select('*')
               .eq('drawing_id', drawings[0].id)
-            
+
             setGuesses(guessData || [])
 
-            if (data.game.status === 'reveal') {
+            if (game.status === 'reveal') {
               const revealRes = await fetch(`/api/game/reveal/${code}`).then(r => r.json())
               setResults(revealRes.results || [])
             }
@@ -60,9 +89,10 @@ export default function HostGamePage() {
         }
       }
     } catch (e: any) {
+      console.error('fetchGameData error:', e)
       setError(e.message)
     }
-  }, [code])
+  }, [code, fetchPlayers])
 
   useEffect(() => {
     fetchGameData()
@@ -74,12 +104,20 @@ export default function HostGamePage() {
 
     console.log('Subscribed to channel:', `game-${code}`)
 
-    const handlePlayerJoined = () => {
-      console.log('Pusher: player-joined event received')
-      fetchGameData()
-    }
-
-    channel.bind('player-joined', handlePlayerJoined)
+    channel.bind('player-joined', (data: { player: { id: string; name: string } }) => {
+      console.log('Pusher: player-joined event received', data)
+      // Immediately add the player from the event data
+      if (data?.player) {
+        setPlayers((prev) => {
+          if (prev.find(p => p.id === data.player.id)) return prev
+          return [...prev, { ...data.player, score: 0 } as Player]
+        })
+      }
+      // Also re-fetch from DB to get complete data
+      if (gameIdRef.current) {
+        fetchPlayers(gameIdRef.current)
+      }
+    })
 
     channel.bind('phase-changed', async (data: { phase: GamePhase }) => {
       console.log('Pusher: phase-changed event received', data)
@@ -104,7 +142,7 @@ export default function HostGamePage() {
       channel.unbind_all()
       pusher.unsubscribe(`game-${code}`)
     }
-  }, [code, fetchGameData])
+  }, [code, fetchGameData, fetchPlayers])
 
   const handleStartGame = useCallback(async () => {
     const sessionId = localStorage.getItem('kludd-host-session')
