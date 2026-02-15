@@ -81,12 +81,14 @@ CREATE INDEX idx_votes_guess ON votes(guess_id);
 -- ============================================
 ALTER TABLE games ENABLE ROW LEVEL SECURITY;
 ALTER TABLE players ENABLE ROW LEVEL SECURITY;
+ALTER TABLE prompts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE drawings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE guesses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE votes ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Allow all for games" ON games FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all for players" ON players FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow read for prompts" ON prompts FOR SELECT USING (true);
 CREATE POLICY "Allow all for drawings" ON drawings FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all for guesses" ON guesses FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all for votes" ON votes FOR ALL USING (true) WITH CHECK (true);
