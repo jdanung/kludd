@@ -70,11 +70,17 @@ export default function HostGamePage() {
     const pusher = getPusherClient()
     const channel = pusher.subscribe(`game-${code}`)
 
-    channel.bind('player-joined', () => {
+    console.log('Subscribed to channel:', `game-${code}`)
+
+    const handlePlayerJoined = () => {
+      console.log('Pusher: player-joined event received')
       fetchGameData()
-    })
+    }
+
+    channel.bind('player-joined', handlePlayerJoined)
 
     channel.bind('phase-changed', async (data: { phase: GamePhase }) => {
+      console.log('Pusher: phase-changed event received', data)
       setPhase(data.phase)
       setSubmittedPlayerIds([])
       fetchGameData()

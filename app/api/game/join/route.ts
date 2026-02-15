@@ -55,9 +55,15 @@ export async function POST(req: NextRequest) {
     if (playerError) throw playerError
 
     const pusherServer = getPusherServer()
-    await pusherServer.trigger(`game-${code}`, 'player-joined', {
-      player: { id: player.id, name: player.name },
-    })
+    try {
+      console.log('Pusher: Triggering player-joined for', code)
+      await pusherServer.trigger(`game-${code}`, 'player-joined', {
+        player: { id: player.id, name: player.name },
+      })
+      console.log('Pusher: player-joined triggered successfully')
+    } catch (pusherErr) {
+      console.error('Pusher trigger error:', pusherErr)
+    }
 
     return NextResponse.json({ player })
   } catch (e: any) {
