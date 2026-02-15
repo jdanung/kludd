@@ -146,11 +146,21 @@ export default function HostGamePage() {
 
   const handleStartGame = useCallback(async () => {
     const sessionId = localStorage.getItem('kludd-host-session')
-    await fetch('/api/game/start', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, hostId: sessionId }),
-    })
+    try {
+      const res = await fetch('/api/game/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, hostId: sessionId }),
+      })
+      const data = await res.json()
+      console.log('Start game response:', res.status, data)
+      if (!res.ok) {
+        setError(data.error || data.details || 'Kunde inte starta spelet')
+      }
+    } catch (e: any) {
+      console.error('Start game fetch error:', e)
+      setError(e.message)
+    }
   }, [code])
 
   const handleNextRound = useCallback(async () => {
