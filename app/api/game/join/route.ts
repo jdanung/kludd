@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { getPusherServer } from '@/lib/pusher-server'
 
+export const dynamic = 'force-dynamic'
+
 export async function POST(req: NextRequest) {
   try {
     const { code, name, sessionId } = await req.json()
@@ -10,19 +12,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Kod, namn och sessionId krävs' }, { status: 400 })
     }
 
+    // Hämta det senaste spelet med den koden som inte är avslutat
     const { data: game, error: gameError } = await supabase
       .from('games')
       .select('*')
       .eq('code', code)
-      .eq('status', 'lobby')
+      .neq('status', 'finished')
+      .order('created_at', { ascending: false })
+      .limit(1)
       .single()
 
     if (gameError || !game) {
+      console.log('Join: Game not found or finished', code)
       return NextResponse.json(
         { error: 'Spelet hittades inte eller har redan startat' },
         { status: 404 }
       )
     }
+
+    console.log('Join: Found game', game.id, 'for code', code)
 
     const { data: existing } = await supabase
       .from('players')
