@@ -35,11 +35,17 @@ export async function POST(req: NextRequest) {
       .select()
       .single()
 
-    if (error) throw error
+    if (error) {
+      console.error('Supabase error inserting game:', error)
+      return NextResponse.json({ error: `Supabase fel: ${error.message}` }, { status: 500 })
+    }
 
     return NextResponse.json({ code: game.code, gameId: game.id })
   } catch (e: any) {
     console.error('Create game error:', e)
-    return NextResponse.json({ error: 'Kunde inte skapa spel' }, { status: 500 })
+    return NextResponse.json({ 
+      error: 'Kunde inte skapa spel',
+      details: e.message || String(e)
+    }, { status: 500 })
   }
 }

@@ -22,10 +22,13 @@ export default function HostPage() {
           body: JSON.stringify({ hostId: sessionId }),
         })
 
-        if (!res.ok) throw new Error('Kunde inte skapa spel')
+        const data = await res.json()
 
-        const { code } = await res.json()
-        router.replace(`/host/${code}`)
+        if (!res.ok) {
+          throw new Error(data.error || data.details || 'Kunde inte skapa spel')
+        }
+
+        router.replace(`/host/${data.code}`)
       } catch (e: any) {
         setError(e.message)
       }
