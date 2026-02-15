@@ -1,7 +1,12 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim()
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim()
+function cleanEnv(val: string | undefined): string {
+  if (!val) return ''
+  return val.replace(/[\s\r\n]+/g, '').trim()
+}
+
+const supabaseUrl = cleanEnv(process.env.NEXT_PUBLIC_SUPABASE_URL)
+const supabaseAnonKey = cleanEnv(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error('MISSING SUPABASE ENV VARS:', {
