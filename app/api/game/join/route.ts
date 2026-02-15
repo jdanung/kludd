@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    console.log('Join: Found game', game.id, 'for code', code)
+    console.log(`Join: Found game ${game.id} for code ${code}. Status: ${game.status}`)
 
     const { data: existing } = await supabase
       .from('players')

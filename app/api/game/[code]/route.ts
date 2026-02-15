@@ -10,6 +10,13 @@ export async function GET(
   try {
     const { code } = params
 
+    const { data: allGames } = await supabase
+      .from('games')
+      .select('id, status, created_at')
+      .eq('code', code)
+    
+    console.log(`API [code]: All games with code ${code}:`, allGames)
+
     const { data: game, error: gameError } = await supabase
       .from('games')
       .select('*')
