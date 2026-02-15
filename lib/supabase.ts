@@ -2,7 +2,8 @@ import { createClient } from '@supabase/supabase-js'
 
 function cleanEnv(val: string | undefined): string {
   if (!val) return ''
-  return val.replace(/[\s\r\n]+/g, '').trim()
+  // Ta bort allt efter första radbrytningen och trimma whitespace
+  return val.split('\n')[0].trim()
 }
 
 const supabaseUrl = cleanEnv(process.env.NEXT_PUBLIC_SUPABASE_URL)
