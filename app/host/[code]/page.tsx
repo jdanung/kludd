@@ -232,6 +232,7 @@ export default function HostGamePage() {
           players={players}
           currentDrawing={currentDrawing}
           results={results}
+          onNext={handleNextRound}
         />
       )}
 

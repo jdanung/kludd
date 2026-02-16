@@ -157,6 +157,11 @@ export default function PlayerGamePage() {
 
       if (res.ok) {
         setHasSubmitted(true)
+        // Auto-check game state after 3 seconds to avoid freeze
+        setTimeout(() => {
+          console.log('Auto-checking game state after drawing submission...')
+          fetchGameState()
+        }, 3000)
       } else {
         const data = await res.json()
         setError(data.error || 'Kunde inte spara ritning')
@@ -198,6 +203,11 @@ export default function PlayerGamePage() {
       const data = await res.json()
       if (res.ok) {
         setHasSubmitted(true)
+        // Auto-check game state after 3 seconds to avoid freeze
+        setTimeout(() => {
+          console.log('Auto-checking game state after guess submission...')
+          fetchGameState()
+        }, 3000)
       } else {
         setError(data.error || 'Kunde inte skicka lögnen')
       }
@@ -223,6 +233,11 @@ export default function PlayerGamePage() {
 
       if (res.ok) {
         setHasSubmitted(true)
+        // Auto-check game state after 3 seconds to avoid freeze
+        setTimeout(() => {
+          console.log('Auto-checking game state after vote submission...')
+          fetchGameState()
+        }, 3000)
       }
     } catch (e) {
       console.error('Submit vote error:', e)

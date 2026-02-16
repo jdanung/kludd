@@ -6,9 +6,10 @@ interface HostRevealProps {
   players: Player[]
   currentDrawing: Drawing
   results: any[] // Innehåller gissningar, röster och vem som skrev vad
+  onNext: () => void
 }
 
-export default function HostReveal({ players, currentDrawing, results }: HostRevealProps) {
+export default function HostReveal({ players, currentDrawing, results, onNext }: HostRevealProps) {
   const correctGuess = results.find(r => r.is_original)
   const fakeGuesses = results.filter(r => !r.is_original)
 
@@ -103,8 +104,14 @@ export default function HostReveal({ players, currentDrawing, results }: HostRev
           </div>
         </div>
 
-        <div className="animate-pulse-glow flex flex-col items-center gap-4">
-            <p className="font-display text-xl text-white/40 italic">Gör er redo för nästa runda...</p>
+        <div className="flex flex-col items-center gap-6">
+          <button
+            onClick={onNext}
+            className="px-12 py-5 bg-gradient-to-r from-kludd-lime to-kludd-blue rounded-2xl font-display text-3xl font-bold shadow-lg shadow-kludd-lime/25 hover:shadow-kludd-lime/40 hover:scale-105 active:scale-95 transition-all duration-300 text-kludd-bg animate-bounce-in"
+          >
+            NÄSTA
+          </button>
+          <p className="font-display text-lg text-white/40 italic">Klicka för att gå vidare</p>
         </div>
       </div>
     </div>
