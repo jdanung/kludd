@@ -42,10 +42,12 @@ export async function POST(req: NextRequest) {
 
     if (!drawing) throw new Error('Teckning hittades inte')
 
-    const { count: playerCount } = await supabase
+    const { data: players } = await supabase
       .from('players')
-      .select('*', { count: 'exact', head: true })
+      .select('id')
       .eq('game_id', drawing.game_id)
+    
+    const playerCount = players?.length || 0
 
     const { count: guessCount } = await supabase
       .from('guesses')
@@ -53,9 +55,11 @@ export async function POST(req: NextRequest) {
       .eq('drawing_id', drawingId)
       .eq('is_original', false)
 
+    console.log(`Submit guess: Progress for drawing ${drawingId}: ${guessCount}/${playerCount - 1}`)
+
     // In Drawful, everyone except the artist writes a fake title
-    if (playerCount && guessCount && guessCount >= (playerCount - 1)) {
-      // All guesses done! Move to voting phase
+    if (playerCount > 0 && guessCount !== null && guessCount >= (playerCount - 1)) {
+      console.log('All guesses submitted for this drawing. Moving to voting phase.')
       await supabase
         .from('games')
         .update({ status: 'voting' })

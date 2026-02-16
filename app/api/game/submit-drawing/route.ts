@@ -66,7 +66,10 @@ export async function POST(req: NextRequest) {
       // All drawings done! Move to guessing phase
       await supabase
         .from('games')
-        .update({ status: 'guessing' })
+        .update({ 
+          status: 'guessing',
+          current_player_index: 0 
+        })
         .eq('id', game.id)
 
       await pusherServer.trigger(`game-${code}`, 'phase-changed', {
