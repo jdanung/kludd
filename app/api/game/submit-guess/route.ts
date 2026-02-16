@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Data saknas' }, { status: 400 })
     }
 
-    const { data: guess, error } = await supabase
+    const { data: guess, error: insertError } = await supabase
       .from('guesses')
       .insert({
         drawing_id: drawingId,
@@ -21,9 +21,11 @@ export async function POST(req: NextRequest) {
         is_original: false
       })
       .select()
-      .single()
 
-    if (error) throw error
+    if (insertError) {
+      console.error('Submit guess: Insert error:', insertError)
+      return NextResponse.json({ error: `Kunde inte spara gissning: ${insertError.message}` }, { status: 500 })
+    }
 
     // Notify host that a guess was submitted
     const pusherServer = getPusherServer()
