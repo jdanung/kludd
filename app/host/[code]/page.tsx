@@ -63,27 +63,38 @@ export default function HostGamePage() {
       await fetchPlayers(game.id)
 
       if (['guessing', 'voting', 'reveal'].includes(game.status)) {
-        const { data: drawings } = await supabase
-          .from('drawings')
+        const { data: playersData } = await supabase
+          .from('players')
           .select('*')
           .eq('game_id', game.id)
-          .eq('round', game.current_round || 1)
-          .limit(1)
+          .order('player_order')
+        
+        const currentPlayer = playersData?.[game.current_player_index || 0]
 
-        if (drawings && drawings.length > 0) {
-          setCurrentDrawing(drawings[0])
+        if (currentPlayer) {
+          const { data: drawings } = await supabase
+            .from('drawings')
+            .select('*')
+            .eq('game_id', game.id)
+            .eq('player_id', currentPlayer.id)
+            .eq('round', game.current_round || 1)
+            .limit(1)
 
-          if (['voting', 'reveal'].includes(game.status)) {
-            const { data: guessData } = await supabase
-              .from('guesses')
-              .select('*')
-              .eq('drawing_id', drawings[0].id)
+          if (drawings && drawings.length > 0) {
+            setCurrentDrawing(drawings[0])
 
-            setGuesses(guessData || [])
+            if (['voting', 'reveal'].includes(game.status)) {
+              const { data: guessData } = await supabase
+                .from('guesses')
+                .select('*')
+                .eq('drawing_id', drawings[0].id)
+              
+              setGuesses(guessData || [])
 
-            if (game.status === 'reveal') {
-              const revealRes = await fetch(`/api/game/reveal/${code}`).then(r => r.json())
-              setResults(revealRes.results || [])
+              if (game.status === 'reveal') {
+                const revealRes = await fetch(`/api/game/reveal/${code}`).then(r => r.json())
+                setResults(revealRes.results || [])
+              }
             }
           }
         }

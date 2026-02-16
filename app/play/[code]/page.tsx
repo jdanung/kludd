@@ -96,6 +96,14 @@ export default function PlayerGamePage() {
 
   useEffect(() => {
     fetchGameState()
+    
+    // Polling som backup till Pusher (var 5:e sekund)
+    const interval = setInterval(() => {
+      console.log('Polling game state...')
+      fetchGameState()
+    }, 5000)
+
+    return () => clearInterval(interval)
   }, [fetchGameState])
 
   useEffect(() => {

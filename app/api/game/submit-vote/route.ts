@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { getPusherServer } from '@/lib/pusher-server'
 
+export const dynamic = 'force-dynamic'
+
 export async function POST(req: NextRequest) {
   try {
     const { code, playerId, guessId } = await req.json()
@@ -10,20 +12,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Data saknas' }, { status: 400 })
     }
 
-    const { data: vote, error } = await supabase
+    const { data: vote, error: voteError } = await supabase
       .from('votes')
       .insert({
         guess_id: guessId,
         player_id: playerId,
       })
       .select()
-      .single()
 
-    if (error) {
-      if (error.code === '23505') {
+    if (voteError) {
+      if (voteError.code === '23505') {
         return NextResponse.json({ error: 'Du har redan röstat' }, { status: 400 })
       }
-      throw error
+      console.error('Submit vote: Insert error:', voteError)
+      return NextResponse.json({ error: `Kunde inte spara röst: ${voteError.message}` }, { status: 500 })
     }
 
     // Notify host that a vote was submitted
@@ -33,38 +35,30 @@ export async function POST(req: NextRequest) {
     })
 
     // Check if all players (except the artist of the current drawing) have voted
-    const { data: guess } = await supabase
+    const { data: guess, error: guessError } = await supabase
       .from('guesses')
       .select('drawing_id')
       .eq('id', guessId)
       .single()
 
-    if (!guess) throw new Error('Gissning hittades inte')
+    if (guessError || !guess) throw new Error('Gissning hittades inte')
 
-    const { data: drawing } = await supabase
+    const { data: drawing, error: drawingError } = await supabase
       .from('drawings')
       .select('player_id, game_id')
       .eq('id', guess.drawing_id)
       .single()
 
-    if (!drawing) throw new Error('Teckning hittades inte')
+    if (drawingError || !drawing) throw new Error('Teckning hittades inte')
 
-    const { count: playerCount } = await supabase
+    const { data: players } = await supabase
       .from('players')
-      .select('*', { count: 'exact', head: true })
+      .select('id')
       .eq('game_id', drawing.game_id)
 
-    const { count: voteCount } = await supabase
-      .from('votes')
-      .select('v.id', { count: 'exact', head: true })
-      .filter('guess_id', 'in', 
-        supabase
-          .from('guesses')
-          .select('id')
-          .eq('drawing_id', guess.drawing_id)
-      )
+    const playerCount = players?.length || 0
 
-    // Actually we need to count votes for all guesses related to this drawing
+    // Count votes for all guesses related to this drawing
     const { data: guessesForDrawing } = await supabase
       .from('guesses')
       .select('id')
@@ -77,9 +71,11 @@ export async function POST(req: NextRequest) {
       .select('*', { count: 'exact', head: true })
       .in('guess_id', guessIds)
 
+    console.log(`Submit vote: Progress for drawing ${guess.drawing_id}: ${totalVotes}/${playerCount - 1}`)
+
     // Everyone except the artist votes
-    if (playerCount && totalVotes && totalVotes >= (playerCount - 1)) {
-      // All votes done! Move to reveal phase
+    if (playerCount > 0 && totalVotes !== null && totalVotes >= (playerCount - 1)) {
+      console.log('All votes submitted. Moving to reveal phase.')
       await supabase
         .from('games')
         .update({ status: 'reveal' })
@@ -93,6 +89,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true })
   } catch (e: any) {
     console.error('Submit vote error:', e)
-    return NextResponse.json({ error: 'Kunde inte spara röst' }, { status: 500 })
+    return NextResponse.json({ error: 'Kunde inte spara röst', details: e.message }, { status: 500 })
   }
 }
