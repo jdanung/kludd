@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { getPusherClient } from '@/lib/pusher-client'
 import { supabase } from '@/lib/supabase'
@@ -17,8 +17,10 @@ export default function PlayerGamePage() {
   const [hasSubmitted, setHasSubmitted] = useState(false)
   const [currentDrawing, setCurrentDrawing] = useState<Drawing | null>(null)
   const [guessText, setGuessText] = useState('')
-
   const [guesses, setGuesses] = useState<Guess[]>([])
+  const [error, setError] = useState<string | null>(null)
+  
+  const gameIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     const name = localStorage.getItem('kludd-player-name')
@@ -27,64 +29,98 @@ export default function PlayerGamePage() {
     if (id) setPlayerId(id)
   }, [])
 
+  const fetchCurrentDrawing = useCallback(async (gId: string, round: number) => {
+    console.log('Fetching drawing for game:', gId, 'round:', round)
+    const { data: drawings, error: drawError } = await supabase
+      .from('drawings')
+      .select('*')
+      .eq('game_id', gId)
+      .eq('round', round)
+      .order('created_at', { ascending: true }) // Ta den första teckningen för rundan
+      .limit(1)
+      .single()
+    
+    if (drawError) {
+      console.error('Error fetching drawing:', drawError)
+    } else if (drawings) {
+      console.log('Current drawing set:', drawings.id)
+      setCurrentDrawing(drawings)
+    }
+  }, [])
+
+  const fetchGameState = useCallback(async () => {
+    try {
+      const { data: game, error: gameError } = await supabase
+        .from('games')
+        .select('*')
+        .eq('code', code)
+        .neq('status', 'finished')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single()
+
+      if (gameError || !game) {
+        console.error('Player: Game not found', gameError)
+        return
+      }
+
+      gameIdRef.current = game.id
+      setPhase(game.status)
+
+      if (game.status === 'guessing' || game.status === 'voting') {
+        await fetchCurrentDrawing(game.id, game.current_round || 1)
+        
+        if (game.status === 'voting') {
+          // Om vi redan är i voting, hämta gissningar
+          const { data: drawings } = await supabase
+            .from('drawings')
+            .select('id')
+            .eq('game_id', game.id)
+            .eq('round', game.current_round || 1)
+            .limit(1)
+            .single()
+          
+          if (drawings) {
+            const { data: guessData } = await supabase
+              .from('guesses')
+              .select('*')
+              .eq('drawing_id', drawings.id)
+            setGuesses(guessData || [])
+          }
+        }
+      }
+    } catch (e) {
+      console.error('fetchGameState error:', e)
+    }
+  }, [code, fetchCurrentDrawing])
+
+  useEffect(() => {
+    fetchGameState()
+  }, [fetchGameState])
+
   useEffect(() => {
     const pusher = getPusherClient()
     const channel = pusher.subscribe(`game-${code}`)
 
     channel.bind('phase-changed', async (data: { phase: GamePhase; prompts?: { playerId: string; prompt: string }[] }) => {
+      console.log('Player: phase-changed received', data.phase)
       setPhase(data.phase)
+      setHasSubmitted(false)
+      
       if (data.phase === 'drawing' && data.prompts) {
         const id = localStorage.getItem('kludd-player-id')
         const myPrompt = data.prompts.find(p => p.playerId === id)?.prompt
         if (myPrompt) setPrompt(myPrompt)
-        setHasSubmitted(false)
       }
 
       if (data.phase === 'guessing') {
-        setHasSubmitted(false)
         setGuessText('')
-        
-        const { data: gameData } = await fetch(`/api/game/${code}`).then(r => r.json())
-        const { data: drawings } = await supabase
-          .from('drawings')
-          .select('*')
-          .eq('game_id', gameData.id)
-          .eq('round', gameData.current_round || 1)
-          .limit(1)
-        
-        if (drawings && drawings.length > 0) {
-          setCurrentDrawing(drawings[0])
-        }
+        // Ge DB en liten stund att indexera om det behövs, sen hämta
+        setTimeout(() => fetchGameState(), 500)
       }
 
       if (data.phase === 'voting') {
-        setHasSubmitted(false)
-        if (currentDrawing) {
-          const { data: guessData } = await supabase
-            .from('guesses')
-            .select('*')
-            .eq('drawing_id', currentDrawing.id)
-          
-          setGuesses(guessData || [])
-        } else {
-          const { data: gameData } = await fetch(`/api/game/${code}`).then(r => r.json())
-          const { data: drawings } = await supabase
-            .from('drawings')
-            .select('*')
-            .eq('game_id', gameData.id)
-            .eq('round', gameData.current_round || 1)
-            .limit(1)
-          
-          if (drawings && drawings.length > 0) {
-            setCurrentDrawing(drawings[0])
-            const { data: guessData } = await supabase
-              .from('guesses')
-              .select('*')
-              .eq('drawing_id', drawings[0].id)
-            
-            setGuesses(guessData || [])
-          }
-        }
+        fetchGameState()
       }
     })
 
@@ -92,10 +128,11 @@ export default function PlayerGamePage() {
       channel.unbind_all()
       pusher.unsubscribe(`game-${code}`)
     }
-  }, [code])
+  }, [code, fetchGameState])
 
   const handleSaveDrawing = async (imageData: string) => {
     if (!playerId) return
+    setError(null)
 
     try {
       const res = await fetch('/api/game/submit-drawing', {
@@ -106,21 +143,37 @@ export default function PlayerGamePage() {
           playerId,
           imageData,
           promptText: prompt,
-          round: 1, // Temporärt hårdkodat
+          round: 1,
         }),
       })
 
       if (res.ok) {
         setHasSubmitted(true)
+      } else {
+        const data = await res.json()
+        setError(data.error || 'Kunde inte spara ritning')
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Save drawing error:', e)
+      setError(e.message)
     }
   }
 
   const handleSubmitGuess = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!playerId || !currentDrawing || !guessText.trim()) return
+    setError(null)
+    
+    console.log('handleSubmitGuess attempt:', { playerId, currentDrawingId: currentDrawing?.id, guessText })
+
+    if (!playerId) {
+      setError('Spelar-ID saknas. Prova att ladda om.')
+      return
+    }
+    if (!currentDrawing) {
+      setError('Teckning har inte laddats än. Vänta ett ögonblick.')
+      return
+    }
+    if (!guessText.trim()) return
 
     try {
       const res = await fetch('/api/game/submit-guess', {
@@ -134,11 +187,15 @@ export default function PlayerGamePage() {
         }),
       })
 
+      const data = await res.json()
       if (res.ok) {
         setHasSubmitted(true)
+      } else {
+        setError(data.error || 'Kunde inte skicka lögnen')
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Submit guess error:', e)
+      setError(e.message)
     }
   }
 
@@ -169,6 +226,15 @@ export default function PlayerGamePage() {
   return (
     <main className="min-h-screen flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-sm h-full flex flex-col">
+        {error && (
+          <div className="fixed top-4 left-4 right-4 z-50 animate-slide-up">
+            <div className="glass-card p-4 border-kludd-pink/50 bg-kludd-pink/10 text-kludd-pink text-center font-display text-sm">
+              {error}
+              <button onClick={() => setError(null)} className="ml-2 underline opacity-50">Stäng</button>
+            </div>
+          </div>
+        )}
+
         {phase === 'lobby' && (
           <div className="text-center space-y-6 animate-slide-up my-auto">
             {/* ... existing lobby content ... */}
