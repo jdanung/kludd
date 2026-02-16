@@ -2,7 +2,12 @@ import Pusher from 'pusher'
 
 function cleanEnv(val: string | undefined): string {
   if (!val) return ''
-  return val.split('\n')[0].trim()
+  // Ta bort ALLA radbrytningar, mellanslag i början/slutet och andra skräptecken
+  return val
+    .replace(/[\r\n\t]/g, '') // Ta bort radbrytningar, tabbar
+    .replace(/\s+$/g, '') // Ta bort whitespace i slutet
+    .replace(/^\s+/g, '') // Ta bort whitespace i början
+    .trim()
 }
 
 let pusherServer: Pusher | null = null
