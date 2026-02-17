@@ -29,15 +29,14 @@ export default function PlayerGamePage() {
     if (id) setPlayerId(id)
   }, [])
 
-  const fetchCurrentDrawing = useCallback(async (gId: string, round: number) => {
-    console.log('Fetching drawing for game:', gId, 'round:', round)
+  const fetchCurrentDrawing = useCallback(async (gId: string, playerIndex: number) => {
+    console.log('Fetching drawing for game:', gId, 'playerIndex:', playerIndex)
     const { data: drawings, error: drawError } = await supabase
       .from('drawings')
       .select('*')
       .eq('game_id', gId)
-      .eq('round', round)
-      .order('created_at', { ascending: true }) // Ta den första teckningen för rundan
-      .limit(1)
+      .order('created_at', { ascending: true })
+      .range(playerIndex, playerIndex) // Hämta specifik teckning baserat på index
       .single()
     
     if (drawError) {
@@ -68,23 +67,22 @@ export default function PlayerGamePage() {
       setPhase(game.status)
 
       if (game.status === 'guessing' || game.status === 'voting') {
-        await fetchCurrentDrawing(game.id, game.current_round || 1)
+        await fetchCurrentDrawing(game.id, game.current_player_index || 0)
         
         if (game.status === 'voting') {
-          // Om vi redan är i voting, hämta gissningar
-          const { data: drawings } = await supabase
+          // Om vi redan är i voting, hämta gissningar för rätt teckning
+          const { data: allDrawings } = await supabase
             .from('drawings')
-            .select('id')
+            .select('*')
             .eq('game_id', game.id)
-            .eq('round', game.current_round || 1)
-            .limit(1)
-            .single()
+            .order('created_at', { ascending: true })
           
-          if (drawings) {
+          if (allDrawings && allDrawings.length > (game.current_player_index || 0)) {
+            const currentDrawing = allDrawings[game.current_player_index || 0]
             const { data: guessData } = await supabase
               .from('guesses')
               .select('*')
-              .eq('drawing_id', drawings.id)
+              .eq('drawing_id', currentDrawing.id)
             setGuesses(guessData || [])
           }
         }
@@ -123,11 +121,18 @@ export default function PlayerGamePage() {
 
       if (data.phase === 'guessing') {
         setGuessText('')
+        setHasSubmitted(false) // Reset submission state
         // Ge DB en liten stund att indexera om det behövs, sen hämta
         setTimeout(() => fetchGameState(), 500)
       }
 
       if (data.phase === 'voting') {
+        setHasSubmitted(false) // Reset submission state
+        fetchGameState()
+      }
+
+      if (data.phase === 'reveal') {
+        setHasSubmitted(false) // Reset submission state
         fetchGameState()
       }
     })
