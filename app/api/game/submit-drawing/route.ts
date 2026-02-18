@@ -92,10 +92,17 @@ export async function POST(req: NextRequest) {
     })
 
     // Check if all players have submitted
-    const { count: playerCount } = await supabase
+    const { data: playersForGame, error: playersForGameError } = await supabase
       .from('players')
-      .select('*', { count: 'exact', head: true })
+      .select('id')
       .eq('game_id', game.id)
+
+    if (playersForGameError) {
+      console.error('Submit drawing: Failed to fetch players for game', playersForGameError)
+      return NextResponse.json({ error: 'Kunde inte läsa spelare' }, { status: 500 })
+    }
+
+    const playerCount = playersForGame?.length || 0
 
     const { data: drawingsForRound } = await supabase
       .from('drawings')
@@ -114,7 +121,7 @@ export async function POST(req: NextRequest) {
       round: currentRound,
     })
 
-    if (playerCount && submittedPlayerCount >= playerCount) {
+    if (playerCount > 0 && submittedPlayerCount >= playerCount) {
       // All drawings done! Move to guessing phase
       const { error: updateError } = await supabase
         .from('games')
@@ -132,9 +139,29 @@ export async function POST(req: NextRequest) {
       await pusherServer.trigger(`game-${code}`, 'phase-changed', {
         phase: 'guessing',
       })
+
+      return NextResponse.json({
+        success: true,
+        movedToGuessing: true,
+        debug: {
+          gameId: game.id,
+          playerCount,
+          submittedPlayerCount,
+          round: currentRound,
+        },
+      })
     }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({
+      success: true,
+      movedToGuessing: false,
+      debug: {
+        gameId: game.id,
+        playerCount,
+        submittedPlayerCount,
+        round: currentRound,
+      },
+    })
   } catch (e: any) {
     console.error('Submit drawing error:', e)
     return NextResponse.json({ error: 'Kunde inte spara ritning' }, { status: 500 })
