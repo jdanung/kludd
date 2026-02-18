@@ -60,17 +60,22 @@ export async function POST(req: NextRequest) {
     // In Drawful, everyone except the artist writes a fake title
     if (playerCount > 0 && guessCount !== null && guessCount >= (playerCount - 1)) {
       console.log('All guesses submitted for this drawing. Moving to voting phase.')
-      await supabase
+      const { error: updateError } = await supabase
         .from('games')
         .update({ status: 'voting' })
         .eq('id', drawing.game_id)
+
+      if (updateError) {
+        console.error('Submit guess: Failed to update game to voting:', updateError)
+        return NextResponse.json({ error: `Kunde inte uppdatera fas: ${updateError.message}` }, { status: 500 })
+      }
 
       await pusherServer.trigger(`game-${code}`, 'phase-changed', {
         phase: 'voting',
       })
     }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, debug: { guessCount, playerCount, threshold: playerCount - 1 } })
   } catch (e: any) {
     console.error('Submit guess error:', e)
     return NextResponse.json({ error: 'Kunde inte spara gissning' }, { status: 500 })
