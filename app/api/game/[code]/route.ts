@@ -23,7 +23,7 @@ export async function GET(
       .from('games')
       .select('*')
       .eq('code', code)
-      .neq('status', 'finished')
+      .in('status', ['lobby', 'drawing', 'guessing', 'voting', 'reveal', 'scores'])
       .order('created_at', { ascending: false })
       .limit(1)
       .single()

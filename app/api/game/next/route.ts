@@ -38,10 +38,59 @@ export async function POST(req: NextRequest) {
       throw new Error('Inga spelare hittades')
     }
 
-    const nextPlayerIndex = (game.current_player_index || 0) + 1
+    const currentIndex = game.current_player_index || 0
+    const nextPlayerIndex = currentIndex + 1
     const pusherServer = getPusherServer()
 
     console.log('Next API: Progressing to index', nextPlayerIndex, 'of', players.length)
+
+    // Räkna poäng för den teckning vi precis visade (currentIndex)
+    const currentPlayer = players[currentIndex]
+    if (currentPlayer) {
+      const { data: drawing } = await supabase
+        .from('drawings')
+        .select('id, player_id, scored')
+        .eq('game_id', game.id)
+        .eq('player_id', currentPlayer.id)
+        .eq('round', game.current_round || 1)
+        .maybeSingle()
+
+      if (drawing && !drawing.scored) {
+        const { data: guesses } = await supabase
+          .from('guesses')
+          .select('id, player_id, is_original')
+          .eq('drawing_id', drawing.id)
+
+        const guessIds = (guesses || []).map(g => g.id)
+        const { data: votes } = await supabase
+          .from('votes')
+          .select('guess_id, player_id')
+          .in('guess_id', guessIds)
+
+        for (const guess of guesses || []) {
+          const guessVotes = (votes || []).filter(v => v.guess_id === guess.id)
+          if (guessVotes.length === 0) continue
+          if (guess.is_original) {
+            // Konstnären får 1000p per röst på rätt svar
+            await supabase.rpc('increment_score', { p_player_id: drawing.player_id, p_amount: guessVotes.length * 1000 })
+            // De som röstade rätt får 500p
+            for (const vote of guessVotes) {
+              await supabase.rpc('increment_score', { p_player_id: vote.player_id, p_amount: 500 })
+            }
+          } else {
+            // Lögnaren får 250p per röst på sin lögn
+            await supabase.rpc('increment_score', { p_player_id: guess.player_id, p_amount: guessVotes.length * 250 })
+          }
+        }
+
+        await supabase
+          .from('drawings')
+          .update({ scored: true })
+          .eq('id', drawing.id)
+
+        console.log('Next API: Scored drawing', drawing.id)
+      }
+    }
 
     if (nextPlayerIndex < players.length) {
       // Det finns fler teckningar i denna runda
