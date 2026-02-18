@@ -67,19 +67,44 @@ export async function POST(req: NextRequest) {
           .select('guess_id, player_id')
           .in('guess_id', guessIds)
 
+        // Bygg upp en map: player_id -> poäng att lägga till
+        const scoreMap: Record<string, number> = {}
+        const addScore = (pid: string, pts: number) => {
+          scoreMap[pid] = (scoreMap[pid] || 0) + pts
+        }
+
         for (const guess of guesses || []) {
           const guessVotes = (votes || []).filter(v => v.guess_id === guess.id)
           if (guessVotes.length === 0) continue
           if (guess.is_original) {
             // Konstnären får 1000p per röst på rätt svar
-            await supabase.rpc('increment_score', { p_player_id: drawing.player_id, p_amount: guessVotes.length * 1000 })
+            addScore(drawing.player_id, guessVotes.length * 1000)
             // De som röstade rätt får 500p
             for (const vote of guessVotes) {
-              await supabase.rpc('increment_score', { p_player_id: vote.player_id, p_amount: 500 })
+              addScore(vote.player_id, 500)
             }
           } else {
             // Lögnaren får 250p per röst på sin lögn
-            await supabase.rpc('increment_score', { p_player_id: guess.player_id, p_amount: guessVotes.length * 250 })
+            addScore(guess.player_id, guessVotes.length * 250)
+          }
+        }
+
+        // Hämta nuvarande poäng och uppdatera med direkta UPDATE
+        for (const [playerId, pts] of Object.entries(scoreMap)) {
+          const { data: playerRow } = await supabase
+            .from('players')
+            .select('score')
+            .eq('id', playerId)
+            .single()
+          const currentScore = playerRow?.score || 0
+          const { error: scoreError } = await supabase
+            .from('players')
+            .update({ score: currentScore + pts })
+            .eq('id', playerId)
+          if (scoreError) {
+            console.error('Next API: Failed to update score for', playerId, scoreError)
+          } else {
+            console.log(`Next API: +${pts}p to player ${playerId} (total: ${currentScore + pts})`)
           }
         }
 
