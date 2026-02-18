@@ -87,23 +87,35 @@ export async function GET(
       }
     }) || []
 
-    // Uppdatera poäng i databasen (körs bara om vi inte redan poängsatt - kan expanderas)
-    // För enkelhets skull kör vi det här just nu
-    for (const res of results) {
-      if (res.is_original) {
-        if (res.voteCount > 0) {
-          const artistPoints = res.voteCount * 1000
-          await supabase.rpc('increment_score', { p_player_id: drawing.player_id, p_amount: artistPoints })
-          for (const vote of res.votes) {
-            await supabase.rpc('increment_score', { p_player_id: vote.player_id, p_amount: 500 })
+    // Poäng räknas bara en gång per teckning — kolla om drawing redan är scored
+    const { data: alreadyScored } = await supabase
+      .from('drawings')
+      .select('scored')
+      .eq('id', drawing.id)
+      .single()
+
+    if (!alreadyScored?.scored) {
+      for (const res of results) {
+        if (res.is_original) {
+          if (res.voteCount > 0) {
+            const artistPoints = res.voteCount * 1000
+            await supabase.rpc('increment_score', { p_player_id: drawing.player_id, p_amount: artistPoints })
+            for (const vote of res.votes) {
+              await supabase.rpc('increment_score', { p_player_id: vote.player_id, p_amount: 500 })
+            }
+          }
+        } else {
+          if (res.voteCount > 0) {
+            const liarPoints = res.voteCount * 250
+            await supabase.rpc('increment_score', { p_player_id: res.player_id, p_amount: liarPoints })
           }
         }
-      } else {
-        if (res.voteCount > 0) {
-          const liarPoints = res.voteCount * 250
-          await supabase.rpc('increment_score', { p_player_id: res.player_id, p_amount: liarPoints })
-        }
       }
+      // Markera teckningen som scored
+      await supabase
+        .from('drawings')
+        .update({ scored: true })
+        .eq('id', drawing.id)
     }
 
     return NextResponse.json({

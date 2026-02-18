@@ -48,6 +48,7 @@ CREATE TABLE drawings (
   prompt_text TEXT NOT NULL,
   image_data TEXT NOT NULL,
   round INT NOT NULL,
+  scored BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

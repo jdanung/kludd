@@ -175,8 +175,21 @@ export default function HostGamePage() {
   }, [code])
 
   const handleNextRound = useCallback(async () => {
-    // API för att gå till nästa runda/teckning
-    await fetch('/api/game/next', {
+    // API för att gå till nästa teckning i denna runda
+    const res = await fetch('/api/game/next', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    })
+    if (!res.ok) {
+      const data = await res.json()
+      setError(data.error || 'Kunde inte gå vidare')
+    }
+  }, [code])
+
+  const handleEndGame = useCallback(async () => {
+    // Avsluta spelet helt
+    await fetch('/api/game/end', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code }),
@@ -239,7 +252,7 @@ export default function HostGamePage() {
       {phase === 'scores' && (
         <HostScores
           players={players}
-          onNextRound={handleNextRound}
+          onNextRound={handleEndGame}
         />
       )}
 
