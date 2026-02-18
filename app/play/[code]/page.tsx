@@ -29,24 +29,6 @@ export default function PlayerGamePage() {
     if (id) setPlayerId(id)
   }, [])
 
-  const fetchCurrentDrawing = useCallback(async (gId: string, playerIndex: number) => {
-    console.log('Fetching drawing for game:', gId, 'playerIndex:', playerIndex)
-    const { data: drawings, error: drawError } = await supabase
-      .from('drawings')
-      .select('*')
-      .eq('game_id', gId)
-      .order('created_at', { ascending: true })
-      .range(playerIndex, playerIndex) // Hämta specifik teckning baserat på index
-      .single()
-    
-    if (drawError) {
-      console.error('Error fetching drawing:', drawError)
-    } else if (drawings) {
-      console.log('Current drawing set:', drawings.id)
-      setCurrentDrawing(drawings)
-    }
-  }, [])
-
   const fetchGameState = useCallback(async () => {
     try {
       const { data: game, error: gameError } = await supabase
@@ -64,33 +46,57 @@ export default function PlayerGamePage() {
       }
 
       gameIdRef.current = game.id
-      setPhase(game.status)
+
+      // DB är enda source of truth — om fas ändrats, resetta submission-state
+      setPhase(prev => {
+        if (prev !== game.status) {
+          console.log(`Phase changed via polling: ${prev} → ${game.status}`)
+          setHasSubmitted(false)
+          setGuessText('')
+        }
+        return game.status
+      })
 
       if (game.status === 'guessing' || game.status === 'voting') {
-        await fetchCurrentDrawing(game.id, game.current_player_index || 0)
-        
-        if (game.status === 'voting') {
-          // Om vi redan är i voting, hämta gissningar för rätt teckning
-          const { data: allDrawings } = await supabase
+        // Hämta rätt spelare baserat på current_player_index
+        const { data: players } = await supabase
+          .from('players')
+          .select('*')
+          .eq('game_id', game.id)
+          .order('player_order')
+
+        const currentPlayerIndex = game.current_player_index || 0
+        const currentPlayer = players?.[currentPlayerIndex]
+
+        if (currentPlayer) {
+          // Hämta teckning via player_id — korrekt attribution
+          const { data: drawing } = await supabase
             .from('drawings')
             .select('*')
             .eq('game_id', game.id)
-            .order('created_at', { ascending: true })
-          
-          if (allDrawings && allDrawings.length > (game.current_player_index || 0)) {
-            const currentDrawing = allDrawings[game.current_player_index || 0]
-            const { data: guessData } = await supabase
-              .from('guesses')
-              .select('*')
-              .eq('drawing_id', currentDrawing.id)
-            setGuesses(guessData || [])
+            .eq('player_id', currentPlayer.id)
+            .eq('round', game.current_round || 1)
+            .limit(1)
+            .single()
+
+          if (drawing) {
+            console.log('Current drawing set via player_id:', drawing.id, 'for player:', currentPlayer.name)
+            setCurrentDrawing(drawing)
+
+            if (game.status === 'voting') {
+              const { data: guessData } = await supabase
+                .from('guesses')
+                .select('*')
+                .eq('drawing_id', drawing.id)
+              setGuesses(guessData || [])
+            }
           }
         }
       }
     } catch (e) {
       console.error('fetchGameState error:', e)
     }
-  }, [code, fetchCurrentDrawing])
+  }, [code])
 
   useEffect(() => {
     fetchGameState()
@@ -110,8 +116,8 @@ export default function PlayerGamePage() {
 
     channel.bind('phase-changed', async (data: { phase: GamePhase; prompts?: { playerId: string; prompt: string }[] }) => {
       console.log('Player: phase-changed received', data.phase)
-      setPhase(data.phase)
       setHasSubmitted(false)
+      setGuessText('')
       
       if (data.phase === 'drawing' && data.prompts) {
         const id = localStorage.getItem('kludd-player-id')
@@ -119,22 +125,8 @@ export default function PlayerGamePage() {
         if (myPrompt) setPrompt(myPrompt)
       }
 
-      if (data.phase === 'guessing') {
-        setGuessText('')
-        setHasSubmitted(false) // Reset submission state
-        // Ge DB en liten stund att indexera om det behövs, sen hämta
-        setTimeout(() => fetchGameState(), 500)
-      }
-
-      if (data.phase === 'voting') {
-        setHasSubmitted(false) // Reset submission state
-        fetchGameState()
-      }
-
-      if (data.phase === 'reveal') {
-        setHasSubmitted(false) // Reset submission state
-        fetchGameState()
-      }
+      // Ge DB en liten stund att skriva klart, sen hämta korrekt state
+      setTimeout(() => fetchGameState(), 300)
     })
 
     return () => {
@@ -162,11 +154,6 @@ export default function PlayerGamePage() {
 
       if (res.ok) {
         setHasSubmitted(true)
-        // Auto-check game state after 3 seconds to avoid freeze
-        setTimeout(() => {
-          console.log('Auto-checking game state after drawing submission...')
-          fetchGameState()
-        }, 3000)
       } else {
         const data = await res.json()
         setError(data.error || 'Kunde inte spara ritning')
@@ -208,11 +195,6 @@ export default function PlayerGamePage() {
       const data = await res.json()
       if (res.ok) {
         setHasSubmitted(true)
-        // Auto-check game state after 3 seconds to avoid freeze
-        setTimeout(() => {
-          console.log('Auto-checking game state after guess submission...')
-          fetchGameState()
-        }, 3000)
       } else {
         setError(data.error || 'Kunde inte skicka lögnen')
       }
@@ -238,11 +220,6 @@ export default function PlayerGamePage() {
 
       if (res.ok) {
         setHasSubmitted(true)
-        // Auto-check game state after 3 seconds to avoid freeze
-        setTimeout(() => {
-          console.log('Auto-checking game state after vote submission...')
-          fetchGameState()
-        }, 3000)
       }
     } catch (e) {
       console.error('Submit vote error:', e)
