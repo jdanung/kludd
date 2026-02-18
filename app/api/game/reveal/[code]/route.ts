@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { getPusherServer } from '@/lib/pusher-server'
+import { unstable_noStore as noStore } from 'next/cache'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,6 +10,7 @@ export async function GET(
   { params }: { params: { code: string } }
 ) {
   try {
+    noStore()
     const { code } = params
 
     // 1. Hämta spelet
@@ -118,11 +120,14 @@ export async function GET(
         .eq('id', drawing.id)
     }
 
-    return NextResponse.json({
-      game,
-      drawing,
-      results
-    })
+    return NextResponse.json(
+      {
+        game,
+        drawing,
+        results,
+      },
+      { headers: { 'Cache-Control': 'no-store, max-age=0' } }
+    )
   } catch (e: any) {
     console.error('Reveal error:', e)
     return NextResponse.json({ error: 'Kunde inte hämta resultat', details: e.message }, { status: 500 })

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { unstable_noStore as noStore } from 'next/cache'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,6 +9,7 @@ export async function GET(
   { params }: { params: { code: string } }
 ) {
   try {
+    noStore()
     const { code } = params
 
     const { data: allGames } = await supabase
@@ -41,7 +43,10 @@ export async function GET(
 
     console.log('API [code]: Found players:', players?.length || 0)
 
-    return NextResponse.json({ game, players: players || [] })
+    return NextResponse.json(
+      { game, players: players || [] },
+      { headers: { 'Cache-Control': 'no-store, max-age=0' } }
+    )
   } catch (e: any) {
     return NextResponse.json({ error: 'Serverfel' }, { status: 500 })
   }
